@@ -1,4 +1,5 @@
 #include "dm_sstwr/uwb.h"
+#include "dm_sstwr/wifi_config.h"
 
 #include "dw3000.h"
 #include <WiFi.h>
@@ -53,10 +54,10 @@ int millis_since_last_serial_print;
 char dist_str[32];  // Buffer for distance string formatting
 
 // WiFi configuration
-const char* ssid = "YOUR_WIFI_SSID";  // Replace with your WiFi SSID
-const char* password = "YOUR_WIFI_PASSWORD";  // Replace with your WiFi password
-const char* target_ip = "192.168.1.100";  // Replace with target ESP32 IP
-const int target_port = 8888;
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
+const char* target_ip = TARGET_IP;
+const int target_port = TARGET_PORT;
 
 WiFiUDP udp;
 bool wifi_connected = false;
@@ -64,11 +65,12 @@ bool wifi_connected = false;
 int target_uids[NUM_NODES - 1];
 
 void init_wifi() {
+#if ENABLE_WIFI_TRANSMISSION
     WiFi.begin(ssid, password);
     Serial.print("Connecting to WiFi");
     
     unsigned long start_time = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - start_time < 10000)) {
+    while (WiFi.status() != WL_CONNECTED && (millis() - start_time < WIFI_TIMEOUT_MS)) {
         delay(500);
         Serial.print(".");
     }
@@ -84,9 +86,14 @@ void init_wifi() {
         Serial.println();
         Serial.println("WiFi connection failed!");
     }
+#else
+    wifi_connected = false;
+    Serial.println("WiFi transmission disabled in config");
+#endif
 }
 
 void send_distance_via_wifi(uint8_t node_id, double distance_value) {
+#if ENABLE_WIFI_TRANSMISSION
     if (!wifi_connected || WiFi.status() != WL_CONNECTED) {
         return;  // Skip if WiFi not connected
     }
@@ -100,6 +107,7 @@ void send_distance_via_wifi(uint8_t node_id, double distance_value) {
     udp.beginPacket(target_ip, target_port);
     udp.print(wifi_data);
     udp.endPacket();
+#endif
 }
 
 void set_target_uids() {
