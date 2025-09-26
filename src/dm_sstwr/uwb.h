@@ -100,5 +100,7 @@ extern int target_uids[NUM_NODES - 1];
 void start_uwb();
 void initiator();
 void responder();
+void init_wifi();
+void send_distance_via_wifi(uint8_t node_id, double distance_value);
 
 #endif

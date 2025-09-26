@@ -1,6 +1,8 @@
 #include "dm_sstwr/uwb.h"
 
 #include "dw3000.h"
+#include <WiFi.h>
+#include <WiFiUdp.h>
 
 dwt_config_t config = {
     5,            /* Channel number. */
@@ -48,8 +50,57 @@ double tof, distance;
 unsigned long previous_debug_millis = 0;
 unsigned long current_debug_millis = 0;
 int millis_since_last_serial_print;
+char dist_str[32];  // Buffer for distance string formatting
+
+// WiFi configuration
+const char* ssid = "YOUR_WIFI_SSID";  // Replace with your WiFi SSID
+const char* password = "YOUR_WIFI_PASSWORD";  // Replace with your WiFi password
+const char* target_ip = "192.168.1.100";  // Replace with target ESP32 IP
+const int target_port = 8888;
+
+WiFiUDP udp;
+bool wifi_connected = false;
 
 int target_uids[NUM_NODES - 1];
+
+void init_wifi() {
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+    
+    unsigned long start_time = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - start_time < 10000)) {
+        delay(500);
+        Serial.print(".");
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        wifi_connected = true;
+        Serial.println();
+        Serial.print("WiFi connected! IP: ");
+        Serial.println(WiFi.localIP());
+        udp.begin(target_port);
+    } else {
+        wifi_connected = false;
+        Serial.println();
+        Serial.println("WiFi connection failed!");
+    }
+}
+
+void send_distance_via_wifi(uint8_t node_id, double distance_value) {
+    if (!wifi_connected || WiFi.status() != WL_CONNECTED) {
+        return;  // Skip if WiFi not connected
+    }
+    
+    // Create JSON-like string with distance data
+    char wifi_data[100];
+    snprintf(wifi_data, sizeof(wifi_data), "{\"node\":%d,\"distance\":%.2f,\"timestamp\":%lu}", 
+             node_id, distance_value, millis());
+    
+    // Send UDP packet
+    udp.beginPacket(target_ip, target_port);
+    udp.print(wifi_data);
+    udp.endPacket();
+}
 
 void set_target_uids() {
 /*
@@ -182,6 +233,9 @@ void start_uwb() {
     Serial.println(APP_NAME);
     Serial.println(UID);
     Serial.println("Setup over........");
+    
+    // Initialize WiFi
+    init_wifi();
 }
 
 void initiator() {
@@ -246,6 +300,9 @@ void initiator() {
             Serial.print("\t");
             snprintf(dist_str, sizeof(dist_str), "%3.2f m\t", distance);
             Serial.print(dist_str);
+            
+            // Send distance data via WiFi
+            send_distance_via_wifi(rx_buffer[i][MSG_SID_IDX], distance);
         }
         Serial.print("\t");
         Serial.print(frame_seq_nb);
@@ -328,6 +385,9 @@ void responder() {
             Serial.print("\t");
             snprintf(dist_str, sizeof(dist_str), "%3.2f m\t", distance);
             Serial.print(dist_str);
+            
+            // Send distance data via WiFi
+            send_distance_via_wifi(rx_buffer[i][MSG_SID_IDX], distance);
         }
         Serial.println();
         previous_debug_millis = current_debug_millis;
