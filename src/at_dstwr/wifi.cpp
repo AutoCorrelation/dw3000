@@ -33,6 +33,15 @@ bool is_wifi_connected() {
 
 void send_distance_data(uint32_t timestamp, uint8_t node_id, uint8_t target_count, 
                        uint8_t* target_ids, float* distances) {
+    static unsigned long last_send_time = 0;
+    const unsigned long MIN_SEND_INTERVAL = 50; // 50ms 최소 간격
+    
+    unsigned long now = millis();
+    if (now - last_send_time < MIN_SEND_INTERVAL) {
+        return; // 너무 빨리 전송하려고 하면 스킵
+    }
+    last_send_time = now;
+    
     if (!is_wifi_connected()) {
         Serial.println("WiFi 연결 끊어짐");
         return;
