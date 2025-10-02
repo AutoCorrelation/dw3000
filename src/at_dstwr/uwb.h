@@ -5,7 +5,7 @@
 
 #include "dw3000.h"
 
-#define NUM_NODES 5
+#define NUM_NODES 2
 #define INTERVAL 5 /* MAX FPS = 1000 / INTERVAL */
 #define UWB_RST 27
 #define UWB_IRQ 34

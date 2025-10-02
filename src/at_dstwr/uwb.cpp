@@ -1,4 +1,5 @@
 #include "at_dstwr/uwb.h"
+#include "at_dstwr/wifi.h"  // WiFi 헤더 추가
 
 #include "dw3000.h"
 
@@ -151,6 +152,14 @@ void set_target_uids() {
 }
 
 void start_uwb() {
+#ifdef WIFI_ENABLED
+    // TAG일 때만 WiFi 연결
+    setup_wifi();
+    Serial.println("WiFi 기능 활성화됨 (TAG 모드)");
+#else
+    Serial.println("WiFi 기능 비활성화됨 (ANCHOR 모드)");
+#endif
+    
     while (!dwt_checkidlerc()) {
         UART_puts("IDLE FAILED\r\n");
         while (1);
@@ -186,6 +195,11 @@ void start_uwb() {
 }
 
 void initiator() {
+#ifdef WIFI_ENABLED
+    // WiFi 상태 주기적 확인 (TAG일 때만)
+    check_wifi_status();
+#endif
+    
     if (!wait_ack && !wait_final && (counter == 0)) {
         wait_ack = true;
         tx_msg[MSG_SN_IDX] = frame_seq_nb;
@@ -266,19 +280,41 @@ void initiator() {
     if (wait_final && (counter == NUM_NODES - 1)) { /* received all final msg */
         range_tx_ts = get_tx_timestamp_u64();
         current_debug_millis = millis();
+        
+#ifdef WIFI_ENABLED
+        // WiFi로 데이터 전송을 위한 배열 준비 (TAG일 때만)
+        uint8_t target_ids_array[NUM_NODES - 1];
+        float distances_array[NUM_NODES - 1];
+#endif
+        
         Serial.print(current_debug_millis - previous_debug_millis);
         Serial.print("ms\t");
+        
         for (int i = 0; i < counter; i++) {
             t_reply_2 = range_tx_ts - (t_round_1[i] + poll_tx_ts);
             tof = (t_round_1[i] * t_round_2[i] - t_reply_1[i] * t_reply_2) /
                   (t_round_1[i] + t_round_2[i] + t_reply_1[i] + t_reply_2) *
                   DWT_TIME_UNITS;
             distance = tof * SPEED_OF_LIGHT;
+            
+#ifdef WIFI_ENABLED
+            // 배열에 데이터 저장 (TAG일 때만)
+            target_ids_array[i] = target_uids[i];
+            distances_array[i] = distance;
+#endif
+            
             snprintf(dist_str, sizeof(dist_str), "%3.3f m\t", distance);
             Serial.print(target_uids[i]);
             Serial.print("\t");
             Serial.print(dist_str);
         }
+        
+#ifdef WIFI_ENABLED
+        // WiFi로 모든 거리 데이터 한번에 전송 (TAG일 때만)
+        send_distance_data(current_debug_millis, UID, counter, 
+                          target_ids_array, distances_array);
+#endif
+        
         Serial.println();
         previous_debug_millis = current_debug_millis;
         counter = 0;
